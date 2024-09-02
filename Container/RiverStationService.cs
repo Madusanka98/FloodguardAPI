@@ -7,6 +7,7 @@ using LearnAPI.Repos;
 using Microsoft.EntityFrameworkCore;
 using DocumentFormat.OpenXml.Office2010.Excel;
 using DocumentFormat.OpenXml.Wordprocessing;
+using Azure;
 
 namespace LearnAPI.Container
 {
@@ -37,6 +38,9 @@ namespace LearnAPI.Container
                 tblRiverStation.Latitude = data.Latitude;
                 tblRiverStation.Longitude = data.Longitude;
                 tblRiverStation.Isactive = true;
+                tblRiverStation.AlertLevel= data.AlertLevel;
+                tblRiverStation.MajorLevel= data.MajorLevel;
+                tblRiverStation.MinorLevel= data.MinorLevel;
                 await this.context.TblRiverStations.AddAsync(tblRiverStation);
                 await this.context.SaveChangesAsync();
                 response.ResponseCode = 201;
@@ -67,7 +71,10 @@ namespace LearnAPI.Container
                         Latitude = item.Latitude,
                         Longitude = item.Longitude,
                         Name = item.Name,
-                        Isactive = item.Isactive
+                        Isactive = item.Isactive,
+                        AlertLevel = item.AlertLevel,
+                        MinorLevel = item.MinorLevel,
+                        MajorLevel = item.MajorLevel
                     };
 
                     _response.Add(riverStation);
@@ -130,7 +137,10 @@ namespace LearnAPI.Container
                             Latitude = item.Latitude,
                             Longitude = item.Longitude,
                             Name = item.Name,
-                            Isactive = item.Isactive
+                            Isactive = item.Isactive,
+                            AlertLevel = item.AlertLevel,
+                            MinorLevel = item.MinorLevel,
+                            MajorLevel = item.MajorLevel
                         };
 
                         _response.Add(riverStation);
@@ -160,6 +170,9 @@ namespace LearnAPI.Container
                 _response.River= await this.service.Getbycode(_data.RiverId);
                 _response.Name = _data.Name;
                 _response.Isactive = _data.Isactive;
+                _response.AlertLevel = _data.AlertLevel;
+                _response.MajorLevel = _data.MajorLevel;
+                _response.MinorLevel = _data.MinorLevel;
             }
             return _response;
         }
@@ -199,14 +212,17 @@ namespace LearnAPI.Container
             APIResponse response = new APIResponse();
             try
             {
-                var _customer = await this.context.TblRiverStations.FindAsync(id);
-                if (_customer != null)
+                var _response = await this.context.TblRiverStations.FindAsync(id);
+                if (_response != null)
                 {
-                    _customer.Name = data.Name;
-                    _customer.Longitude = data.Longitude;
-                    _customer.Latitude = data.Latitude;
-                    _customer.RiverId = data.River.Id;
-                    _customer.Isactive = data.Isactive;
+                    _response.Name = data.Name;
+                    _response.Longitude = data.Longitude;
+                    _response.Latitude = data.Latitude;
+                    _response.RiverId = data.River.Id;
+                    _response.Isactive = data.Isactive;
+                    _response.AlertLevel = data.AlertLevel;
+                    _response.MajorLevel = data.MajorLevel;
+                    _response.MinorLevel = data.MinorLevel;
                     //_customer.Id = data.Id;
                     await this.context.SaveChangesAsync();
                     response.ResponseCode = 200;

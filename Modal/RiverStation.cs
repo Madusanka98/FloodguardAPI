@@ -18,5 +18,9 @@ namespace LearnAPI.Modal
         public string? Longitude { get; set; }
 
         public bool? Isactive { get; set; }
+
+        public double AlertLevel { get; set; }
+        public double MajorLevel { get; set; }
+        public double MinorLevel { get; set; }
     }
 }

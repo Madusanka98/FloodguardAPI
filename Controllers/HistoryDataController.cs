@@ -1,9 +1,12 @@
-﻿using LearnAPI.Container;
+﻿using DocumentFormat.OpenXml.Bibliography;
+using LearnAPI.Container;
 using LearnAPI.Modal;
 using LearnAPI.Service;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace LearnAPI.Controllers
 {
@@ -69,16 +72,17 @@ namespace LearnAPI.Controllers
         [HttpGet("currentPredict")]
         public async Task<IActionResult> currentPredict(string configHours)
         {
-            List<RiverStation> stations = await riverStationService.GetallActive();
-            if (stations != null)
-            {
-                var data = await this.service.GetDataMain1(stations, configHours);
+            //List<RiverStation> stations = await riverStationService.GetallActive();
+            //if (stations != null)
+            //{
+                //var data = await this.service.GetDataMain1(stations, configHours);
+                var data = await this.service.Getall();
                 return Ok(data);
-            }
-            else
-            {
-                return BadRequest();
-            }
+            //}
+            //else
+            //{
+                //return BadRequest();
+            //}
             
         }
 

@@ -1,32 +1,38 @@
-﻿using LearnAPI.Service;
+﻿using Hangfire;
+using LearnAPI.Service;
 
 namespace LearnAPI.HangfireJob
 {
     public class SampleJob
     {
         private readonly IRiverStationService _riverStation;
-        private readonly IHistoryDataService service;
+        private readonly IHistoryDataService _service;
 
         public SampleJob(IRiverStationService riverStation, IHistoryDataService service)
         {
             _riverStation = riverStation;
-            this.service = service;
-             //Execute();
+            _service = service;
         }
 
+        [DisableConcurrentExecution(3600)] // Prevent concurrent execution for 1 hour
         public async Task Execute()
         {
-            var riverStations = await _riverStation.GetallActive();
-            if (riverStations != null)
+            try
             {
-                //var data = await this.service.GetDataMain(riverStations, "7");
-                //var result = await this.service.SaveHistoryData(data);
-                //return Ok(data);
+                var riverStations = await _riverStation.GetallActive();
+                if (riverStations != null)
+                {
+                    var data = await _service.GetDataMain1(riverStations, "7");
+                    await _service.SaveHistoryData(data);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                return;
+
+                throw;
             }
+            
         }
     }
+
 }

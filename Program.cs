@@ -85,7 +85,7 @@ builder.Services.AddCors(p => p.AddPolicy("corspolicy", build =>
 
 builder.Services.AddCors(p => p.AddPolicy("corspolicy1", build =>
 {
-    build.WithOrigins("https://localhost:7249", "http://localhost:56281", "https://localhost:7143").AllowAnyMethod().AllowAnyHeader();
+    build.WithOrigins("https://localhost:7249", "http://localhost:56281", "https://localhost:7143", "https://floodguard-api.azurewebsites.net").AllowAnyMethod().AllowAnyHeader();
 }));
 
 builder.Services.AddCors(p => p.AddDefaultPolicy(build =>
@@ -138,10 +138,25 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Use Hangfire Dashboard
-app.UseHangfireDashboard("/hangfire");
+app.UseRouting();
+
+// Configure Hangfire Dashboard with basic authentication
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireCustomBasicAuthenticationFilter
+    {
+        User = builder.Configuration["HangfireSettings:User"],
+        Pass = builder.Configuration["HangfireSettings:Pass"]
+    }}
+});
+
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllers();
+});
 
 // Register the recurring job
+
 using (var scope = app.Services.CreateScope())
 {
     var serviceProvider = scope.ServiceProvider;
@@ -150,10 +165,16 @@ using (var scope = app.Services.CreateScope())
     var historyDataService = serviceProvider.GetRequiredService<IHistoryDataService>();
 
     var sampleJob = new SampleJob(riverStations, historyDataService);
+
+    // Define the Sri Lanka time zone
+    var sriLankaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+
+    // Register the job with the specified time zone
     recurringJobManager.AddOrUpdate(
-        "Save Predictopn Data",
+        "Save Prediction Data",
         () => sampleJob.Execute(),
-        Cron.Hourly); // Runs every minute
+        "05 9 * * *", // Triggers at 1:10 AM daily in Sri Lanka time
+        sriLankaTimeZone);
 }
 
 app.Run();

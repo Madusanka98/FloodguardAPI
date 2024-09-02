@@ -29,5 +29,12 @@ namespace LearnAPI.Modal
 
         [Column("isactive")]
         public bool? Isactive { get; set; }
+
+        [Column("alertLevel")]
+        public double AlertLevel { get; set; }
+        [Column("majorLevel")]
+        public double MajorLevel { get; set; }
+        [Column("minorLevel")]
+        public double MinorLevel { get; set; }
     }
 }

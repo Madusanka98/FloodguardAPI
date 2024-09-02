@@ -5,7 +5,7 @@ namespace LearnAPI.Service
 {
     public interface IHistoryDataService
     {
-        Task<List<HistoryData>> Getall();
+        Task<List<CurrentPredict>> Getall();
         Task<HistoryData> Getbycode(int id);
         Task<APIResponse> Remove(int id);
         Task<APIResponse> Create(HistoryData data);
