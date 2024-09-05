@@ -86,6 +86,23 @@ namespace LearnAPI.Controllers
             
         }
 
+        [HttpGet("triggerManualyPredict")]
+        public async Task<IActionResult> triggerManualyPredict(string configHours)
+        {
+            List<RiverStation> stations = await riverStationService.GetallActive();
+            if (stations != null)
+            {
+                var data = await this.service.GetDataMain1(stations, "7");
+                return Ok(data);
+            }
+            else
+            {
+                return BadRequest();
+            }
+
+        }
+
+
         [HttpGet("currentRiverHeight")]
         public async Task<IActionResult> currentRiverHeight()
         {
