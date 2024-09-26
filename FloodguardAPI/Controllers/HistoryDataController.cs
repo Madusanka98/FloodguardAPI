@@ -72,17 +72,41 @@ namespace LearnAPI.Controllers
         [HttpGet("currentPredict")]
         public async Task<IActionResult> currentPredict(string configHours)
         {
-            //List<RiverStation> stations = await riverStationService.GetallActive();
-            //if (stations != null)
-            //{
-                //var data = await this.service.GetDataMain1(stations, configHours);
+            List<RiverStation> stations = await riverStationService.GetallActive();
+            if (stations != null)
+            {
+                var data = await this.service.GetDataMain2(stations, configHours);
+                //var data = await this.service.Getall();
+                return Ok(data);
+            }
+            else
+            {
+                return BadRequest();
+            }
+        }
+
+        [HttpGet("currentResult")]
+        public async Task<IActionResult> currentResult(string configHours)
+        {
+            try
+            {
+                //List<RiverStation> stations = await riverStationService.GetallActive();
+                //if (stations != null)
+                //{
+                //    var data = await this.service.GetDataMain2(stations, configHours);
                 var data = await this.service.Getall();
                 return Ok(data);
-            //}
-            //else
-            //{
-                //return BadRequest();
-            //}
+                //}
+                //else
+                //{
+                //    return BadRequest();
+                //}
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
             
         }
 

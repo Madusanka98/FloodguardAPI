@@ -17,6 +17,9 @@ using System.Text;
 using Hangfire;
 using Hangfire.SqlServer;
 using LearnAPI.HangfireJob;
+using FloodguardAPI.Modal;
+using FloodguardAPI.Service;
+using FloodguardAPI.Container;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +33,7 @@ builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Emai
 builder.Services.AddTransient<IRiverStationService, RiverStationService>();
 builder.Services.AddTransient<IRiverService, RiverService>();
 builder.Services.AddTransient<IHistoryDataService, HistoryDataService>();
+builder.Services.AddTransient< IPredictResultService, PredictResultService>();
 builder.Services.AddTransient<IRefreshHandler, RefreshHandler>();
 builder.Services.AddTransient<IUserService, UserService>();
 builder.Services.AddTransient<IUserRoleServicecs, UserRoleService>();
@@ -163,18 +167,27 @@ using (var scope = app.Services.CreateScope())
     var recurringJobManager = serviceProvider.GetRequiredService<IRecurringJobManager>();
     var riverStations = serviceProvider.GetRequiredService<IRiverStationService>();
     var historyDataService = serviceProvider.GetRequiredService<IHistoryDataService>();
+    var predictResultService = serviceProvider.GetRequiredService< IPredictResultService >();
 
-    var sampleJob = new SampleJob(riverStations, historyDataService);
+    var sampleJob = new SampleJob(riverStations, historyDataService, predictResultService);
 
     // Define the Sri Lanka time zone
     var sriLankaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
 
-    // Register the job with the specified time zone
+    // Register the daily job at 9:13 AM
     recurringJobManager.AddOrUpdate(
-        "Save Prediction Data",
+        "Daily Save Prediction Data",  // Unique identifier for the daily job
         () => sampleJob.Execute(),
-        "05 9 * * *", // Triggers at 1:10 AM daily in Sri Lanka time
+        "13 9 * * *", // Triggers at 9:13 AM daily
+        sriLankaTimeZone);
+
+    // Register the job to run at specific 3-hour intervals
+    recurringJobManager.AddOrUpdate(
+        "Every 3 Hours Save Prediction Data",
+        () => sampleJob.ExecuteEveryThreeHours(),
+        "0 0,3,6,9,12,15,18,21 * * *",  // Triggers at specified times
         sriLankaTimeZone);
 }
+
 
 app.Run();

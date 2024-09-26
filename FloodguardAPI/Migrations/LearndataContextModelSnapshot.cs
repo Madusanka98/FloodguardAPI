@@ -22,6 +22,49 @@ namespace FloodguardAPI.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("FloodguardAPI.Repos.Models.TblPredictResult", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConfigTime")
+                        .HasColumnType("int")
+                        .HasColumnName("ConfigTime");
+
+                    b.Property<double>("Rainfall")
+                        .HasColumnType("float")
+                        .HasColumnName("Rainfall");
+
+                    b.Property<string>("RangeDate")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<double>("RiverHeight")
+                        .HasColumnType("float")
+                        .HasColumnName("RiverHeight");
+
+                    b.Property<int>("RiverId")
+                        .HasColumnType("int")
+                        .HasColumnName("RiverId");
+
+                    b.Property<int>("StationId")
+                        .HasColumnType("int")
+                        .HasColumnName("StationId");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("Status");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("tbl_predictResult");
+                });
+
             modelBuilder.Entity("FloodguardAPI.Repos.Models.TblRiverStationUsers", b =>
                 {
                     b.Property<int>("Id")

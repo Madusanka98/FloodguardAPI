@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FloodguardAPI.test")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4a0a525402cc0458941363c117190ecf67125892")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e8445550fcaa02d276f958127a24abf4924a2cb1")]
 [assembly: System.Reflection.AssemblyProductAttribute("FloodguardAPI.test")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FloodguardAPI.test")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

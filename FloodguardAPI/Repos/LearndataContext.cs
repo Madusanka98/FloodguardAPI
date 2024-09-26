@@ -39,6 +39,7 @@ public partial class LearndataContext : DbContext
     public virtual DbSet<TblRiverStation> TblRiverStations { get; set; }
     public virtual DbSet<TblRiver> TblRivers { get; set; }
     public virtual DbSet<TblRiverStationUsers> TblRiverStationUsers { get; set; }
+    public virtual DbSet<TblPredictResult> TblPredictResults { get; set; }
 
     // Add Hangfire job and state tables
     //public virtual DbSet<Hangfire.Job> HangfireJobs { get; set; }

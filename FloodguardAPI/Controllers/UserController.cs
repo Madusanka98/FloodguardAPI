@@ -76,7 +76,18 @@ namespace LearnAPI.Controllers
         [HttpGet("Getbycode")]
         public async Task<IActionResult> Getbycode(string code)
         {
-            var data = await this.userService.Getbycode(code);
+            var data = await this.userService.GetByName(code);
+            if (data == null)
+            {
+                return NotFound();
+            }
+            return Ok(data);
+        }
+
+        [HttpGet("GetbyName")]
+        public async Task<IActionResult> GetbyName(string name)
+        {
+            var data = await this.userService.GetByName(name);
             if (data == null)
             {
                 return NotFound();

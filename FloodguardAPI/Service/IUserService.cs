@@ -14,5 +14,6 @@ namespace LearnAPI.Service
         Task<APIResponse> UpdateRole(string username, string userrole);
         Task<List<UserModel>> Getall();
         Task<UserModel> Getbycode(string code);
+        Task<UserModel> GetByName(string name);
     }
 }

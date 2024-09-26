@@ -402,5 +402,17 @@ namespace LearnAPI.Container
             }
             return _response;
         }
+
+        public async Task<UserModel> GetByName(string name)
+        {
+            UserModel _response = new UserModel();
+            var _data = await this.context.TblUsers
+                                         .FirstOrDefaultAsync(u => u.Name == name); // Assuming 'Name' is the column for the user name
+            if (_data != null)
+            {
+                _response = this.mapper.Map<TblUser, UserModel>(_data);
+            }
+            return _response;
+        }
     }
 }

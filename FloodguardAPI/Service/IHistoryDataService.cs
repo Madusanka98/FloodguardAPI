@@ -1,4 +1,5 @@
-﻿using LearnAPI.Helper;
+﻿using FloodguardAPI.Modal;
+using LearnAPI.Helper;
 using LearnAPI.Modal;
 
 namespace LearnAPI.Service
@@ -14,6 +15,7 @@ namespace LearnAPI.Service
         Task<List<CurrentPredict>> GetDataMain(List<RiverStation> riverStation, string configHours);
 
         Task<List<CurrentPredict>> GetDataMain1(List<RiverStation> stations, string configHours);
+        Task<List<PredictResult>> GetDataMain2(List<RiverStation> stations, string configHours);
 
         Task<APIResponse> SaveHistoryData(List<CurrentPredict> data);
 

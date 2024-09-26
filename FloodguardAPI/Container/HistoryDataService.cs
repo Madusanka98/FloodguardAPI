@@ -90,8 +90,8 @@ namespace LearnAPI.Container
 
                     CurrentPredict historyData = new CurrentPredict
                     {
-                        DateRange = item.Date.ToString(),
-                        RiverHight = item.RiverHeight.ToString(),
+                        DateRange = item.Date.HasValue ? item.Date.Value.ToString("yyyy-MM-dd") : string.Empty,
+                        RiverHight = item.RiverHeight.ToString("F2"),
                         Rainfall = item.RainfallData.ToString(),
                         River = river.Name,
                         StationName = riverStation.Name,
@@ -262,72 +262,296 @@ namespace LearnAPI.Container
 
         }
 
-        public async Task<List<CurrentPredict>> GetDataMain2(List<RiverStation> stations, string configHours)
+        public async Task<List<PredictResult>> GetDataMain2(List<RiverStation> stations, string configHours)
         {
             try
             {
-                List<CurrentPredict> currentPredicts = new List<CurrentPredict>();
+                List<PredictResult> currentPredicts = new List<PredictResult>();
 
 
                 string apiKey = "255b0873711e0735ea8809f1d485c3c4";
-                DateTimeOffset dateTime = DateTimeOffset.UtcNow.AddDays(-1);
-                long timestamp = dateTime.ToUnixTimeSeconds();
-                //string units = "metric";
+                string units = "metric";
 
                 foreach (RiverStation station in stations)
                 {
+                    string url = $"https://api.openweathermap.org/data/2.5/forecast?lat={station.Latitude}&lon={station.Longitude}&appid={apiKey}&units={units}";
 
+                    using HttpClient client = new HttpClient();
+                    HttpResponseMessage response = await client.GetAsync(url);
 
-                    //string url = $"https://api.openweathermap.org/data/2.5/forecast?lat={station.Latitude}&lon={station.Longitude}&appid={apiKey}&units={units}";
-                    //string url = $"https://api.openweathermap.org/data/2.5/onecall/timemachine?lat={station.Latitude}&lon={station.Longitude}&dt={timestamp}&appid={apiKey}";
-                    string url1 = "https://floodms.navy.lk/api/riverdata";
-                    string modelURL = "http://127.0.0.1:8000/forecast/" + station.Name;
-                    //using HttpClient client = new HttpClient();
-                    //HttpResponseMessage response = await client.GetAsync(url);
-
-
-                    //double currentRainfall = GetRainfallData(station.Latitude, station.Longitude, url);
-                    double currentRainfall = GetForecastRainfallData(Convert.ToDouble(station.Latitude), Convert.ToDouble(station.Longitude), apiKey);
-                    double currentRiverHeight = await GetWaterLevels(url1, station.Name);
-                    //List<double> results = await PostDataAndGetResponse(modelURL, currentRiverHeight, currentRainfall).Result;
-
-                    List<double> results = PostDataAndGetResponse(modelURL, currentRiverHeight, currentRainfall).Result;
-                    if (results.Any())
+                    if (response.IsSuccessStatusCode)
                     {
-                        foreach (double result in results)
+                        string responseData = await response.Content.ReadAsStringAsync();
+                        var stationPredicts = await ParseRainfallData2(responseData, station.Name, station.Id, station.River.Id, configHours, station.AlertLevel, station.MinorLevel, station.MajorLevel);
+                        currentPredicts.AddRange(stationPredicts);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Error fetching weather data for {station.Name}");
+                    }
+                }
+
+                return currentPredicts;
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
+
+        }
+
+        public async Task<List<PredictResult>> ParseRainfallData2(string jsonResponse, string stationName, int stationId, int riverId, string configHours, double alertLevel, double minorLevel, double majorLevel)
+        {
+            try
+            {
+                /*new Station { Name = "Putupaula", Latitude = 6.6828m, Longitude = 80.3992m },
+                new Station { Name = "Ellagawa", Latitude = 6.9344m, Longitude = 80.6093m },
+                new Station { Name = "Rathnapura", Latitude = 6.6958m, Longitude = 80.4037m },
+                new Station { Name = "Magura", Latitude = 6.8259m, Longitude = 80.4993m },
+                new Station { Name = "Kalawellawa", Latitude = 6.8725m, Longitude = 80.4472m }*/
+                List<PredictResult> currentPredicts = new List<PredictResult>();
+                int flag = 0;
+                double rainfall = 0;
+                var json = JObject.Parse(jsonResponse);
+                var forecasts = json["list"];
+                Console.WriteLine($"Rainfall data for {stationName}:");
+                string startDate = "";
+                string endDate = "";
+                string url1 = "https://floodms.navy.lk/api/riverdata";
+
+                foreach (var forecast in forecasts)
+                {
+                    string dateTime = forecast["dt_txt"].ToString();
+                    DateTime date = DateTime.Parse(dateTime);
+
+                    // Filter forecasts to start from 9:00 AM for each day
+                    if (date.TimeOfDay == new TimeSpan(9, 00, 0) && configHours == "7")
+                    {
+                        var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
+                        startDate = date.ToString();
+                        if (rain != null && flag == Int32.Parse(configHours))
                         {
-                            CurrentPredict currentPredict = new CurrentPredict
+                            string status = "";
+                            string modelURL = "http://127.0.0.1:8000/forecast/" + stationName;
+                            double currentRiverHeight = await GetWaterLevels(url1, stationName);
+                            double results = PostDataAndGetResponse2(modelURL, currentRiverHeight, Convert.ToDouble(rain)).Result;
+                            endDate = date.ToString();
+
+                            if (majorLevel < results)
                             {
-                                DateRange = DateTime.Now.ToString(), // Convert dateTime string to DateTime object
-                                ConfigTime = 0,
-                                River = "Kalu Ganga",
-                                StationName = station.Name,
-                                Rainfall = currentRainfall.ToString(), // Convert rain to double
-                                RiverHight = result.ToString(),
-                                stationId = station.Id
+                                status = "Major Level";
+                            }
+                            else if (minorLevel < results)
+                            {
+                                status = "Minor Level";
+                            }
+                            else if (alertLevel < results)
+                            {
+                                status = "Alert Level";
+                            }
+                            else
+                            {
+                                status = "Normal";
+                            }
+
+                            PredictResult currentPredict = new PredictResult
+                            {
+                                RangeDate = startDate + " - " + date.AddHours(12).ToString(), // Convert dateTime string to DateTime object
+                                ConfigTime = flag,
+                                RiverId = riverId,
+                                Rainfall = Convert.ToDouble(rain), // Convert rain to double
+                                RiverHeight = results,
+                                StationId = stationId,
+                                Status = status
                             };
 
                             currentPredicts.Add(currentPredict);
+                            flag = 0;
+                            startDate = endDate;
+                            endDate = "";
+
                         }
-
+                        else
+                        {
+                            Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                            flag = 0;
+                        }
                     }
-                    /*CurrentPredict currentPredict = new CurrentPredict
+                    else if ((date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(21, 00, 0)) && configHours == "3")
                     {
-                        DateRange = startDate + " - " + date.AddHours(12).ToString(), // Convert dateTime string to DateTime object
-                        ConfigTime = flag,
-                        River = riverName,
-                        StationName = stationName,
-                        Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
-                        RiverHight = "5",
-                        stationId = stationId
-                    };
+                        JToken? jToken = forecast["rain"]?["3h"];
+                        var rain = jToken; // The "3h" field represents the rainfall volume for the last 3 hours.
+                        startDate = date.ToString();
+                        if (rain != null && flag == Int32.Parse(configHours))
+                        {
+                            string status = "";
+                            string modelURL = "http://127.0.0.1:8000/forecast/" + stationName;
+                            double currentRiverHeight = await GetWaterLevels(url1, stationName);
+                            double results = PostDataAndGetResponse2(modelURL, currentRiverHeight, Convert.ToDouble(rain)).Result;
+                            endDate = date.ToString();
 
-                    currentPredicts.Add(currentPredict);*/
+                            if (majorLevel < results)
+                            {
+                                status = "Major Level";
+                            }
+                            else if (minorLevel < results)
+                            {
+                                status = "Minor Level";
+                            }
+                            else if (alertLevel < results)
+                            {
+                                status = "Alert Level";
+                            }
+                            else
+                            {
+                                status = "Normal";
+                            }
 
-                    /*string responseData = await response.Content.ReadAsStringAsync();
-                    var stationPredicts = ParseRainfallData(responseData, station.Name, station.Id, station.River.Name, configHours);
-                    currentPredicts.AddRange(stationPredicts);*/
+                            PredictResult currentPredict = new PredictResult
+                            {
+                                RangeDate = startDate + " - " + date.AddHours(12).ToString(), // Convert dateTime string to DateTime object
+                                ConfigTime = flag,
+                                RiverId = riverId,
+                                Rainfall = Convert.ToDouble(rain), // Convert rain to double
+                                RiverHeight = results,
+                                StationId = stationId,
+                                Status = status
+                            };
 
+                            currentPredicts.Add(currentPredict);
+                            flag = 0;
+                            startDate = endDate;
+                            endDate = "";
+
+                        }
+                        else
+                        {
+                            Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                            flag = 0;
+                        }
+                    }
+                    else if ((date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(3, 00, 0) ||
+                        date.TimeOfDay == new TimeSpan(21, 00, 0) || date.TimeOfDay == new TimeSpan(15, 00, 0))
+                        && configHours == "1")
+                    {
+                        var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
+                        startDate = date.ToString();
+                        if (rain != null && flag == Int32.Parse(configHours))
+                        {
+                            string status = "";
+                            string modelURL = "http://127.0.0.1:8000/forecast/" + stationName;
+                            double currentRiverHeight = await GetWaterLevels(url1, stationName);
+                            double results = PostDataAndGetResponse2(modelURL, currentRiverHeight, Convert.ToDouble(rain)).Result;
+                            endDate = date.ToString();
+
+                            if (majorLevel < results)
+                            {
+                                status = "Major Level";
+                            }
+                            else if (minorLevel < results)
+                            {
+                                status = "Minor Level";
+                            }
+                            else if (alertLevel < results)
+                            {
+                                status = "Alert Level";
+                            }
+                            else
+                            {
+                                status = "Normal";
+                            }
+
+                            PredictResult currentPredict = new PredictResult
+                            {
+                                RangeDate = startDate + " - " + date.AddHours(6).ToString(), // Convert dateTime string to DateTime object
+                                ConfigTime = flag,
+                                RiverId = riverId,
+                                Rainfall = Convert.ToDouble(rain), // Convert rain to double
+                                RiverHeight = results,
+                                StationId = stationId,
+                                Status = status
+                            };
+
+                            currentPredicts.Add(currentPredict);
+                            flag = 0;
+                            startDate = endDate;
+                            endDate = "";
+
+                        }
+                        else
+                        {
+                            Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                            flag = 0;
+                        }
+                    }
+                    else if ((date.TimeOfDay == new TimeSpan(3, 00, 0) || date.TimeOfDay == new TimeSpan(6, 00, 0) ||
+                        date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(12, 00, 0) ||
+                        date.TimeOfDay == new TimeSpan(15, 00, 0) || date.TimeOfDay == new TimeSpan(18, 00, 0) ||
+                        date.TimeOfDay == new TimeSpan(21, 00, 0) || date.TimeOfDay == new TimeSpan(00, 00, 0)
+                        ) && configHours == "0")
+                    {
+                        var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
+                        startDate = date.ToString();
+                        if (rain != null && flag == Int32.Parse(configHours))
+                        {
+                            string status = "";
+                            string modelURL = "http://127.0.0.1:8000/forecast/" + stationName;
+                            double currentRiverHeight = await GetWaterLevels(url1, stationName);
+                            double results = PostDataAndGetResponse2(modelURL, currentRiverHeight, Convert.ToDouble(rain)).Result;
+                            endDate = date.ToString();
+
+                            if (majorLevel < results)
+                            {
+                                status = "Major Level";
+                            }
+                            else if (minorLevel < results)
+                            {
+                                status = "Minor Level";
+                            }
+                            else if (alertLevel < results)
+                            {
+                                status = "Alert Level";
+                            }
+                            else
+                            {
+                                status = "Normal";
+                            }
+
+                            PredictResult currentPredict = new PredictResult
+                            {
+                                RangeDate = startDate + " - " + date.AddHours(3).ToString(), // Convert dateTime string to DateTime object
+                                ConfigTime = flag,
+                                RiverId = riverId,
+                                Rainfall = Convert.ToDouble(rain), // Convert rain to double
+                                RiverHeight = results,
+                                StationId = stationId,
+                                Status = status
+                            };
+
+                            currentPredicts.Add(currentPredict);
+                            flag = 0;
+                            startDate = endDate;
+                            endDate = "";
+
+                        }
+                        else
+                        {
+                            Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                            flag = 0;
+                        }
+                    }
+                    else
+                    {
+                        var rain = forecast["rain"]?["3h"];
+
+                        if (rain != null)
+                        {
+                            double val = Convert.ToDouble(rain); // Convert rain to double
+                            rainfall = rainfall + val;
+                        }
+                        flag++;
+                    }
                 }
 
                 return currentPredicts;
@@ -381,192 +605,202 @@ namespace LearnAPI.Container
 
         public async Task<List<CurrentPredict>> ParseRainfallData(string jsonResponse, string stationName, int stationId, string riverName, string configHours, double alertLevel, double minorLevel, double majorLevel)
         {
-            /*new Station { Name = "Putupaula", Latitude = 6.6828m, Longitude = 80.3992m },
-            new Station { Name = "Ellagawa", Latitude = 6.9344m, Longitude = 80.6093m },
-            new Station { Name = "Rathnapura", Latitude = 6.6958m, Longitude = 80.4037m },
-            new Station { Name = "Magura", Latitude = 6.8259m, Longitude = 80.4993m },
-            new Station { Name = "Kalawellawa", Latitude = 6.8725m, Longitude = 80.4472m }*/
-            List<CurrentPredict> currentPredicts = new List<CurrentPredict>();
-            int flag = 0;
-            double rainfall = 0;
-            var json = JObject.Parse(jsonResponse);
-            var forecasts = json["list"];
-            Console.WriteLine($"Rainfall data for {stationName}:");
-            string startDate = "";
-            string endDate = "";
-            string url1 = "https://floodms.navy.lk/api/riverdata";
-
-            foreach (var forecast in forecasts)
+            try
             {
-                string dateTime = forecast["dt_txt"].ToString();
-                DateTime date = DateTime.Parse(dateTime);
+                /*new Station { Name = "Putupaula", Latitude = 6.6828m, Longitude = 80.3992m },
+                new Station { Name = "Ellagawa", Latitude = 6.9344m, Longitude = 80.6093m },
+                new Station { Name = "Rathnapura", Latitude = 6.6958m, Longitude = 80.4037m },
+                new Station { Name = "Magura", Latitude = 6.8259m, Longitude = 80.4993m },
+                new Station { Name = "Kalawellawa", Latitude = 6.8725m, Longitude = 80.4472m }*/
+                List<CurrentPredict> currentPredicts = new List<CurrentPredict>();
+                int flag = 0;
+                double rainfall = 0;
+                var json = JObject.Parse(jsonResponse);
+                var forecasts = json["list"];
+                Console.WriteLine($"Rainfall data for {stationName}:");
+                string startDate = "";
+                string endDate = "";
+                string url1 = "https://floodms.navy.lk/api/riverdata";
 
-                // Filter forecasts to start from 9:00 AM for each day
-                if (date.TimeOfDay == new TimeSpan(9, 00, 0) && configHours == "7")
+                foreach (var forecast in forecasts)
                 {
-                    var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
-                    startDate = date.ToString();
-                    if (rain != null && flag == Int32.Parse(configHours))
-                    {
-                        string type = "";
-                        bool status = false;
-                        string modelURL = "http://127.0.0.1:8000/forecast/" + stationName;
-                        double currentRiverHeight = await GetWaterLevels(url1, stationName);
-                        double results = PostDataAndGetResponse2(modelURL, currentRiverHeight, Convert.ToDouble(rain)).Result;
-                        endDate = date.ToString();
-                        
-                        if (majorLevel < results)
-                        {
-                            type = "Major Level";
-                            status = true;
-                        }
-                        else if(minorLevel < results)
-                        {
-                            type = "Minor Level";
-                            status = true;
-                        }
-                        else if(alertLevel < results)
-                        {
-                            type = "Alert Level";
-                            status = true;
-                        }
-                        if (status)
-                        {
-                            var res = await SendAlertLevelMail(type, startDate + " - " + date.AddDays(1).ToString(), results.ToString(), stationId);
-                        }
-                        CurrentPredict currentPredict = new CurrentPredict
-                        {
-                            DateRange = startDate, // Convert dateTime string to DateTime object
-                            ConfigTime = flag,
-                            River = riverName,
-                            StationName = stationName,
-                            Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
-                            RiverHight = results.ToString(),
-                            stationId = stationId
-                        };
-                        
-                        currentPredicts.Add(currentPredict);
-                        flag = 0;
-                        startDate = endDate;
-                        endDate = "";
+                    string dateTime = forecast["dt_txt"].ToString();
+                    DateTime date = DateTime.Parse(dateTime);
 
+                    // Filter forecasts to start from 9:00 AM for each day
+                    if (date.TimeOfDay == new TimeSpan(9, 00, 0) && configHours == "7")
+                    {
+                        var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
+                        startDate = date.ToString();
+                        if (rain != null && flag == Int32.Parse(configHours))
+                        {
+                            string type = "";
+                            bool status = false;
+                            string modelURL = "http://127.0.0.1:8000/forecast/" + stationName;
+                            double currentRiverHeight = await GetWaterLevels(url1, stationName);
+                            double results = PostDataAndGetResponse2(modelURL, currentRiverHeight, Convert.ToDouble(rain)).Result;
+                            endDate = date.ToString();
+
+                            if (majorLevel < results)
+                            {
+                                type = "Major Level";
+                                status = true;
+                            }
+                            else if (minorLevel < results)
+                            {
+                                type = "Minor Level";
+                                status = true;
+                            }
+                            else if (alertLevel < results)
+                            {
+                                type = "Alert Level";
+                                status = true;
+                            }
+                            if (status)
+                            {
+                                var res = await SendAlertLevelMail(type, startDate + " - " + date.AddDays(1).ToString(), results.ToString("F2"
+                                    ), stationId);
+                            }
+                            CurrentPredict currentPredict = new CurrentPredict
+                            {
+                                DateRange = startDate, // Convert dateTime string to DateTime object
+                                ConfigTime = flag,
+                                River = riverName,
+                                StationName = stationName,
+                                Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
+                                RiverHight = results.ToString(),
+                                stationId = stationId
+                            };
+
+                            currentPredicts.Add(currentPredict);
+                            flag = 0;
+                            startDate = endDate;
+                            endDate = "";
+
+                        }
+                        else
+                        {
+                            Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                            flag = 0;
+                        }
                     }
+                    //else if ((date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(21, 00, 0)) && configHours == "3")
+                    //{
+                    //    var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
+                    //    startDate = date.ToString();
+                    //    if (rain != null && flag == Int32.Parse(configHours))
+                    //    {
+                    //        endDate = date.ToString();
+                    //        CurrentPredict currentPredict = new CurrentPredict
+                    //        {
+                    //            DateRange = startDate + " - " + date.AddHours(12).ToString(), // Convert dateTime string to DateTime object
+                    //            ConfigTime = flag,
+                    //            River = riverName,
+                    //            StationName = stationName,
+                    //            Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
+                    //            RiverHight = "5",
+                    //            stationId = stationId
+                    //        };
+
+                    //        currentPredicts.Add(currentPredict);
+                    //        flag = 0;
+                    //        startDate = endDate;
+                    //        endDate = "";
+
+                    //    }
+                    //    else
+                    //    {
+                    //        Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                    //        flag = 0;
+                    //    }
+                    //}
+                    //else if ((date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(3, 00, 0) ||
+                    //    date.TimeOfDay == new TimeSpan(21, 00, 0) || date.TimeOfDay == new TimeSpan(15, 00, 0))
+                    //    && configHours == "1")
+                    //{
+                    //    var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
+                    //    startDate = date.ToString();
+                    //    if (rain != null && flag == Int32.Parse(configHours))
+                    //    {
+                    //        endDate = date.ToString();
+                    //        CurrentPredict currentPredict = new CurrentPredict
+                    //        {
+                    //            DateRange = startDate + " - " + date.AddHours(6).ToString(), // Convert dateTime string to DateTime object
+                    //            ConfigTime = flag,
+                    //            River = riverName,
+                    //            StationName = stationName,
+                    //            Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
+                    //            RiverHight = "5",
+                    //            stationId = stationId
+                    //        };
+
+                    //        currentPredicts.Add(currentPredict);
+                    //        flag = 0;
+                    //        startDate = endDate;
+                    //        endDate = "";
+
+                    //    }
+                    //    else
+                    //    {
+                    //        Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                    //        flag = 0;
+                    //    }
+                    //}
+                    //else if ((date.TimeOfDay == new TimeSpan(3, 00, 0) || date.TimeOfDay == new TimeSpan(6, 00, 0) ||
+                    //    date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(12, 00, 0) ||
+                    //    date.TimeOfDay == new TimeSpan(15, 00, 0) || date.TimeOfDay == new TimeSpan(18, 00, 0) ||
+                    //    date.TimeOfDay == new TimeSpan(21, 00, 0) || date.TimeOfDay == new TimeSpan(00, 00, 0)
+                    //    ) && configHours == "0")
+                    //{
+                    //    var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
+                    //    startDate = date.ToString();
+                    //    if (rain != null && flag == Int32.Parse(configHours))
+                    //    {
+                    //        endDate = date.ToString();
+                    //        CurrentPredict currentPredict = new CurrentPredict
+                    //        {
+                    //            DateRange = startDate + " - " + date.AddHours(3).ToString(), // Convert dateTime string to DateTime object
+                    //            ConfigTime = flag,
+                    //            River = riverName,
+                    //            StationName = stationName,
+                    //            Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
+                    //            RiverHight = "5",
+                    //            stationId = stationId
+                    //        };
+
+                    //        currentPredicts.Add(currentPredict);
+                    //        flag = 0;
+                    //        startDate = endDate;
+                    //        endDate = "";
+
+                    //    }
+                    //    else
+                    //    {
+                    //        Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
+                    //        flag = 0;
+                    //    }
+                    //}
                     else
                     {
-                        Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
-                        flag = 0;
+                        var rain = forecast["rain"]?["3h"];
+
+                        if (rain != null)
+                        {
+                            double val = Convert.ToDouble(rain); // Convert rain to double
+                            rainfall = rainfall + val;
+                        }
+                        flag++;
                     }
                 }
-                //else if ((date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(21, 00, 0)) && configHours == "3")
-                //{
-                //    var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
-                //    startDate = date.ToString();
-                //    if (rain != null && flag == Int32.Parse(configHours))
-                //    {
-                //        endDate = date.ToString();
-                //        CurrentPredict currentPredict = new CurrentPredict
-                //        {
-                //            DateRange = startDate + " - " + date.AddHours(12).ToString(), // Convert dateTime string to DateTime object
-                //            ConfigTime = flag,
-                //            River = riverName,
-                //            StationName = stationName,
-                //            Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
-                //            RiverHight = "5",
-                //            stationId = stationId
-                //        };
 
-                //        currentPredicts.Add(currentPredict);
-                //        flag = 0;
-                //        startDate = endDate;
-                //        endDate = "";
-
-                //    }
-                //    else
-                //    {
-                //        Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
-                //        flag = 0;
-                //    }
-                //}
-                //else if ((date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(3, 00, 0) ||
-                //    date.TimeOfDay == new TimeSpan(21, 00, 0) || date.TimeOfDay == new TimeSpan(15, 00, 0))
-                //    && configHours == "1")
-                //{
-                //    var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
-                //    startDate = date.ToString();
-                //    if (rain != null && flag == Int32.Parse(configHours))
-                //    {
-                //        endDate = date.ToString();
-                //        CurrentPredict currentPredict = new CurrentPredict
-                //        {
-                //            DateRange = startDate + " - " + date.AddHours(6).ToString(), // Convert dateTime string to DateTime object
-                //            ConfigTime = flag,
-                //            River = riverName,
-                //            StationName = stationName,
-                //            Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
-                //            RiverHight = "5",
-                //            stationId = stationId
-                //        };
-
-                //        currentPredicts.Add(currentPredict);
-                //        flag = 0;
-                //        startDate = endDate;
-                //        endDate = "";
-
-                //    }
-                //    else
-                //    {
-                //        Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
-                //        flag = 0;
-                //    }
-                //}
-                //else if ((date.TimeOfDay == new TimeSpan(3, 00, 0) || date.TimeOfDay == new TimeSpan(6, 00, 0) ||
-                //    date.TimeOfDay == new TimeSpan(9, 00, 0) || date.TimeOfDay == new TimeSpan(12, 00, 0) ||
-                //    date.TimeOfDay == new TimeSpan(15, 00, 0) || date.TimeOfDay == new TimeSpan(18, 00, 0) ||
-                //    date.TimeOfDay == new TimeSpan(21, 00, 0) || date.TimeOfDay == new TimeSpan(00, 00, 0)
-                //    ) && configHours == "0")
-                //{
-                //    var rain = forecast["rain"]?["3h"]; // The "3h" field represents the rainfall volume for the last 3 hours.
-                //    startDate = date.ToString();
-                //    if (rain != null && flag == Int32.Parse(configHours))
-                //    {
-                //        endDate = date.ToString();
-                //        CurrentPredict currentPredict = new CurrentPredict
-                //        {
-                //            DateRange = startDate + " - " + date.AddHours(3).ToString(), // Convert dateTime string to DateTime object
-                //            ConfigTime = flag,
-                //            River = riverName,
-                //            StationName = stationName,
-                //            Rainfall = Convert.ToDouble(rain).ToString(), // Convert rain to double
-                //            RiverHight = "5",
-                //            stationId = stationId
-                //        };
-
-                //        currentPredicts.Add(currentPredict);
-                //        flag = 0;
-                //        startDate = endDate;
-                //        endDate = "";
-
-                //    }
-                //    else
-                //    {
-                //        Console.WriteLine($"DateTime: {dateTime}, Rainfall: No data");
-                //        flag = 0;
-                //    }
-                //}
-                else
-                {
-                    var rain = forecast["rain"]?["3h"];
-
-                    if (rain != null)
-                    {
-                        double val = Convert.ToDouble(rain); // Convert rain to double
-                        rainfall = rainfall + val;
-                    }
-                    flag++;
-                }
+                return currentPredicts;
             }
+            catch (Exception ex)
+            {
 
-            return currentPredicts;
+                throw;
+            }
+            
         }
 
         public async Task<APIResponse> SaveHistoryData(List<CurrentPredict> data)
@@ -812,7 +1046,7 @@ namespace LearnAPI.Container
             return resultList;
         }
 
-        
+
         public async Task<bool> SendAlertLevelMail(string alertType, string date, string riverHeight, int stationId)
         {
             try
@@ -820,7 +1054,6 @@ namespace LearnAPI.Container
                 // Fetch the list of users associated with the specified river station
                 var users = await this.context.TblRiverStationUsers
                                              .Where(rsu => rsu.RiverStationId == stationId)
-                                             //.Select(t => t.UserId)
                                              .ToListAsync();
 
                 // Check if users were found
@@ -829,11 +1062,29 @@ namespace LearnAPI.Container
                     foreach (var user in users)
                     {
                         var res = await this.context.TblUsers.Where(x => x.Id == user.UserId && x.Isactive == true).FirstOrDefaultAsync();
+                        var station = await this.context.TblRiverStations.Where(s => s.Id == stationId).FirstOrDefaultAsync(); // Fetch station details
+
                         var mailRequest = new Mailrequest
                         {
                             Email = res.Email,
                             Subject = "Flood Warning Alert Level - " + alertType,
-                            Emailbody = "River height: " + riverHeight + " on " + date // Adjust this body content as needed
+                            Emailbody = $"<p>Dear {res.Name},</p>" +
+                                        $"<p>Please be informed that a flood alert for the <strong>{alertType}</strong> level has been issued for your area.</p>" +
+                                        $"<p><strong>River Station</strong>: {station.Name}<br>" +
+                                        $"<strong>Date</strong>: {date}<br>" +
+                                        $"<strong>Current River Height</strong>: {riverHeight} meters</p>" +
+                                        "<p>The water level has reached a critical point, and there is an increased risk of flooding in your area. We recommend taking the following actions:</p>" +
+                                        "<ul>" +
+                                        "<li>Stay updated on further alerts from local authorities.</li>" +
+                                        "<li>Prepare an emergency kit with essential items.</li>" +
+                                        "<li>Be ready to evacuate if the situation worsens.</li>" +
+                                        "<li>Avoid low-lying areas and riverbanks.</li>" +
+                                        "</ul>" +
+                                        "<p>Stay safe, and please contact local emergency services if needed.</p>" +
+                                        "<p>Best regards,<br>FloodGUARD Team</p>"+
+                                        "<p>&nbsp;</p>"+
+                                        "<p>&nbsp;</p>" +
+                                        "<p>[This is an auto-generated e-mail. Please do not reply]</p>"
                         };
 
                         // Send the email
@@ -846,9 +1097,10 @@ namespace LearnAPI.Container
             {
                 throw;
             }
-            
         }
 
-        
+
+
+
     }
 }
